@@ -1,10 +1,11 @@
 import { Module, Global } from '@nestjs/common';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import * as schema from './schema/index.js';
-import { DatabaseService } from './database.service.js';
+import * as schema from './schema/index';
+import { DatabaseService } from './database.service';
+import { DRIZZLE } from './drizzle.constants';
 
-export const DRIZZLE = Symbol('DRIZZLE');
+export { DRIZZLE };
 
 @Global()
 @Module({

@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { DRIZZLE } from './drizzle.module.js';
-import type { DrizzleDB } from './drizzle.types.js';
-import { users, posts, NewUser, NewPost, User, Post } from './schema/index.js';
+import { DRIZZLE } from './drizzle.constants';
+import type { DrizzleDB } from './drizzle.types';
+import { users, posts, NewUser, NewPost, User, Post } from './schema/index';
 
 @Injectable()
 export class DatabaseService {
