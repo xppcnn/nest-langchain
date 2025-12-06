@@ -2,15 +2,15 @@ import {
   Injectable,
   ConflictException,
   UnauthorizedException,
-  InternalServerErrorException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { eq, and } from 'drizzle-orm';
-import { DatabaseService } from '../database/database.service';
-import { users, refreshTokens, User, NewUser } from '../database/schema';
-import { RegisterDto, LoginDto } from './dto';
+import { DrizzleService } from '@/database/drizzle.service';
+import { users, refreshTokens, User } from '../database/schema';
+import { RegisterDto } from './dto';
+import { UserService } from '../user/user.service';
 
 export interface JwtPayload {
   sub: number;
@@ -34,9 +34,10 @@ export interface GoogleProfile {
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly db: DatabaseService,
+    private readonly drizzle: DrizzleService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly userService: UserService,
   ) {}
 
   // ==================== 本地注册登录 ====================
@@ -45,66 +46,26 @@ export class AuthService {
     const { name, email, password } = registerDto;
 
     // 检查邮箱是否已存在
-    const existingUser = await this.db.query.users.findFirst({
-      where: eq(users.email, email),
-    });
+    const existingUser = await this.userService.findUserByEmail(email);
 
     if (existingUser) {
       throw new ConflictException('该邮箱已被注册');
     }
 
-    // 加密密码
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    // 创建用户
-    const [newUser] = await this.db.db
-      .insert(users)
-      .values({
-        name,
-        email,
-        password: hashedPassword,
-        provider: 'local',
-      })
-      .returning();
-
+    const newUser = await this.userService.createUser(
+      name,
+      email,
+      password,
+      'local',
+    );
     return this.generateTokens(newUser);
-  }
-
-  async login(loginDto: LoginDto): Promise<TokenResponse> {
-    const { email, password } = loginDto;
-
-    // 查找用户
-    const user = await this.db.query.users.findFirst({
-      where: eq(users.email, email),
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('邮箱或密码错误');
-    }
-
-    // 检查是否是本地用户
-    if (user.provider !== 'local' || !user.password) {
-      throw new UnauthorizedException(
-        '该账户使用 Google 登录，请使用 Google 登录',
-      );
-    }
-
-    // 验证密码
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('邮箱或密码错误');
-    }
-
-    return this.generateTokens(user);
   }
 
   async validateLocalUser(
     email: string,
     password: string,
   ): Promise<User | null> {
-    const user = await this.db.query.users.findFirst({
-      where: eq(users.email, email),
-    });
+    const user = await this.userService.findUserByEmail(email);
 
     if (!user || user.provider !== 'local' || !user.password) {
       return null;
@@ -120,7 +81,7 @@ export class AuthService {
     const { id, email, displayName, picture } = profile;
 
     // 查找是否已存在该 Google 用户
-    let user = await this.db.query.users.findFirst({
+    const user = await this.drizzle.query.users.findFirst({
       where: and(eq(users.provider, 'google'), eq(users.providerId, id)),
     });
 
@@ -129,13 +90,13 @@ export class AuthService {
     }
 
     // 检查邮箱是否已存在（本地注册的用户）
-    const existingEmailUser = await this.db.query.users.findFirst({
+    const existingEmailUser = await this.drizzle.query.users.findFirst({
       where: eq(users.email, email),
     });
 
     if (existingEmailUser) {
       // 如果本地用户存在，关联 Google 账户
-      const [updatedUser] = await this.db.db
+      const [updatedUser] = await this.drizzle.db
         .update(users)
         .set({
           provider: 'google',
@@ -151,7 +112,7 @@ export class AuthService {
     }
 
     // 创建新的 Google 用户
-    const [newUser] = await this.db.db
+    const [newUser] = await this.drizzle.db
       .insert(users)
       .values({
         name: displayName,
@@ -172,7 +133,7 @@ export class AuthService {
 
   // ==================== JWT 相关 ====================
 
-  async generateTokens(user: User): Promise<TokenResponse> {
+  async generateTokens(user: Omit<User, 'password'>): Promise<TokenResponse> {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -190,20 +151,16 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 天后过期
 
-    await this.db.db.insert(refreshTokens).values({
+    await this.drizzle.db.insert(refreshTokens).values({
       userId: user.id,
       token: refreshToken,
       expiresAt,
     });
 
-    // 移除密码字段
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...userWithoutPassword } = user;
-
     return {
       accessToken,
       refreshToken,
-      user: userWithoutPassword,
+      user: user,
     };
   }
 
@@ -215,7 +172,7 @@ export class AuthService {
       });
 
       // 检查 token 是否在数据库中
-      const storedToken = await this.db.query.refreshTokens.findFirst({
+      const storedToken = await this.drizzle.query.refreshTokens.findFirst({
         where: and(
           eq(refreshTokens.token, token),
           eq(refreshTokens.userId, payload.sub),
@@ -229,29 +186,26 @@ export class AuthService {
       // 检查是否过期
       if (new Date() > storedToken.expiresAt) {
         // 删除过期的 token
-        await this.db.db
+        await this.drizzle.db
           .delete(refreshTokens)
           .where(eq(refreshTokens.id, storedToken.id));
         throw new UnauthorizedException('刷新令牌已过期');
       }
 
       // 删除旧的 refresh token
-      await this.db.db
+      await this.drizzle.db
         .delete(refreshTokens)
         .where(eq(refreshTokens.id, storedToken.id));
 
       // 获取用户信息
-      const user = await this.db.query.users.findFirst({
-        where: eq(users.id, payload.sub),
-      });
-
+      const user = await this.userService.findById(payload.sub);
       if (!user) {
         throw new UnauthorizedException('用户不存在');
       }
 
       // 生成新的 tokens
       return this.generateTokens(user);
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
@@ -262,7 +216,7 @@ export class AuthService {
   async logout(userId: number, refreshToken?: string): Promise<void> {
     if (refreshToken) {
       // 删除特定的 refresh token
-      await this.db.db
+      await this.drizzle.db
         .delete(refreshTokens)
         .where(
           and(
@@ -272,33 +226,9 @@ export class AuthService {
         );
     } else {
       // 删除用户所有的 refresh tokens（登出所有设备）
-      await this.db.db
+      await this.drizzle.db
         .delete(refreshTokens)
         .where(eq(refreshTokens.userId, userId));
     }
   }
-
-  // ==================== 用户验证 ====================
-
-  async validateUserById(id: number): Promise<User | null> {
-    const user = await this.db.query.users.findFirst({
-      where: eq(users.id, id),
-    });
-    return user ?? null;
-  }
-
-  async getProfile(userId: number): Promise<Omit<User, 'password'>> {
-    const user = await this.db.query.users.findFirst({
-      where: eq(users.id, userId),
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('用户不存在');
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...userWithoutPassword } = user;
-    return userWithoutPassword;
-  }
 }
-

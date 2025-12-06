@@ -2,7 +2,7 @@ import { Module, Global } from '@nestjs/common';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema/index';
-import { DatabaseService } from './database.service';
+import { DrizzleService } from './drizzle.service';
 import { DRIZZLE } from './drizzle.constants';
 import { ConfigService } from '@nestjs/config';
 export { DRIZZLE };
@@ -22,8 +22,8 @@ export { DRIZZLE };
         return drizzle(client, { schema });
       },
     },
-    DatabaseService,
+    DrizzleService,
   ],
-  exports: [DRIZZLE, DatabaseService],
+  exports: [DRIZZLE, DrizzleService],
 })
 export class DrizzleModule {}

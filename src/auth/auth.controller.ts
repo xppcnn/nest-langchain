@@ -12,7 +12,7 @@ import {
 import type { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { AuthService, TokenResponse } from './auth.service';
-import { RegisterDto, LoginDto } from './dto';
+import { RegisterDto } from './dto';
 import { LocalAuthGuard, GoogleAuthGuard, JwtAuthGuard } from './guards';
 import { Public, CurrentUser } from './decorators';
 import type { User } from '../database/schema';
@@ -49,10 +49,7 @@ export class AuthController {
   @UseGuards(LocalAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Post('login')
-  async login(
-    @Req() req: RequestWithUser,
-    @Body() loginDto: LoginDto,
-  ): Promise<TokenResponse> {
+  async login(@Req() req: RequestWithUser): Promise<TokenResponse> {
     // LocalAuthGuard 已经验证了用户，用户信息在 req.user 中
     return this.authService.generateTokens(req.user);
   }
@@ -139,29 +136,4 @@ export class AuthController {
     await this.authService.logout(userId);
     return { message: '已登出所有设备' };
   }
-
-  // ==================== 用户信息 ====================
-
-  /**
-   * 获取当前用户信息
-   * GET /auth/profile
-   */
-  @UseGuards(JwtAuthGuard)
-  @Get('profile')
-  async getProfile(@CurrentUser('id') userId: number) {
-    return this.authService.getProfile(userId);
-  }
-
-  /**
-   * 获取当前用户（简化版，直接从 token 中获取）
-   * GET /auth/me
-   */
-  @UseGuards(JwtAuthGuard)
-  @Get('me')
-  async getCurrentUser(@CurrentUser() user: User) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...userWithoutPassword } = user;
-    return userWithoutPassword;
-  }
 }
-

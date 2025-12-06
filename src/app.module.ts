@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 import { DrizzleModule } from './database/drizzle.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards';
+import { UserModule } from './user/user.module';
 
 @Module({
   imports: [
@@ -18,6 +19,8 @@ import { JwtAuthGuard } from './auth/guards';
     DrizzleModule,
     // 认证模块
     AuthModule,
+    // 用户模块
+    UserModule,
   ],
   controllers: [AppController],
   providers: [

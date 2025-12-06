@@ -5,12 +5,13 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { LocalStrategy, GoogleStrategy, JwtStrategy } from './strategies';
-import { DatabaseService } from '../database/database.service';
 import { DrizzleModule } from '../database/drizzle.module';
+import { UserModule } from '../user/user.module';
 
 @Module({
   imports: [
     DrizzleModule,
+    UserModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -24,14 +25,7 @@ import { DrizzleModule } from '../database/drizzle.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [
-    AuthService,
-    LocalStrategy,
-    GoogleStrategy,
-    JwtStrategy,
-    DatabaseService,
-  ],
+  providers: [AuthService, LocalStrategy, GoogleStrategy, JwtStrategy],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}
-
