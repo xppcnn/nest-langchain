@@ -4,7 +4,7 @@ import postgres from 'postgres';
 import * as schema from './schema/index';
 import { DatabaseService } from './database.service';
 import { DRIZZLE } from './drizzle.constants';
-
+import { ConfigService } from '@nestjs/config';
 export { DRIZZLE };
 
 @Global()
@@ -12,10 +12,12 @@ export { DRIZZLE };
   providers: [
     {
       provide: DRIZZLE,
-      useFactory: () => {
-        const connectionString =
-          process.env.DATABASE_URL ||
-          'postgresql://xwl:password@localhost:5432/nest-langchain';
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const connectionString = configService.get<string>('DATABASE_URL');
+        if (!connectionString) {
+          throw new Error('DATABASE_URL is not set');
+        }
         const client = postgres(connectionString);
         return drizzle(client, { schema });
       },

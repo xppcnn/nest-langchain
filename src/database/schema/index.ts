@@ -1,6 +1,7 @@
 import {
   pgTable,
   serial,
+  integer,
   varchar,
   text,
   timestamp,
@@ -27,7 +28,7 @@ export const users = pgTable('users', {
 // 刷新令牌表 - 用于 JWT 刷新
 export const refreshTokens = pgTable('refresh_tokens', {
   id: serial('id').primaryKey(),
-  userId: serial('user_id')
+  userId: integer('user_id')
     .references(() => users.id, { onDelete: 'cascade' })
     .notNull(),
   token: varchar('token', { length: 500 }).notNull().unique(),
@@ -40,7 +41,7 @@ export const posts = pgTable('posts', {
   id: serial('id').primaryKey(),
   title: varchar('title', { length: 255 }).notNull(),
   content: text('content'),
-  authorId: serial('author_id').references(() => users.id),
+  authorId: integer('author_id').references(() => users.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
