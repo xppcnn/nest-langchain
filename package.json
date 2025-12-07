@@ -20,7 +20,9 @@
     "db:push": "pnpm --filter @nest-langchain/backend db:push",
     "db:studio": "pnpm --filter @nest-langchain/backend db:studio"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@tsconfig/recommended": "^1.0.13"
+  },
   "devDependencies": {
     "@types/node": "^22.10.7",
     "typescript": "^5.7.3"
